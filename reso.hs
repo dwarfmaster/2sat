@@ -1,5 +1,7 @@
 -- vim:set foldmethod=marker:
 
+import Data.Array
+
 -- {{{ Pile structure
 data Pile a = EmptyPile | RecurPile a (Pile a)
 
@@ -28,43 +30,39 @@ instance Show a => Show (Pile a) where
 -- }}}
 
 -- {{{ Graph structure
-data Graph a = Graph { nodes    :: [Maybe a],
-                       links    :: [[Int]],
-                       capacity :: Int,
-                       size     :: Int
-                     }
+data Vertex a = Vertex { key   :: a,
+                         links :: [Int]
+                       }
+instance Show a => Show (Vertex a) where
+    show v = "(" ++ show (key v) ++ ":" ++ show (links v) ++ ")"
+type Graph a = Array Int (Vertex a)
 
-graph_init :: Graph a
-graph_init = Graph [] [] 0 0
+graph_build :: [(a, [Int])] -> Graph a
+graph_build l = listArray (1,length l) $ map (\(e, t) -> Vertex e t) l
 
-graph_add :: Graph a -> a -> Graph a
-graph_add g e = if capacity g == size g then Graph (Just e : nodes g)
-                                                   ([] : links g)
-                                                   (1 + capacity g)
-                                                   (1 + size g)
-                                        else let (nds, lks) = insert e (nodes g) (links g) in
-                                             Graph nds lks (capacity g) (1 + size g)
- where insert :: a -> [Maybe a] -> [[Int]] -> ([Maybe a], [[Int]])
-       insert e [] _ = ([], [])
-       insert e (Nothing:tl) (hd:lks) = (Just e : tl, [] : lks)
-       insert e (hd1:tl1) (hd2:tl2)   = (hd1 : itl1, hd2 : itl2)
-        where (itl1, itl2) = insert e tl1 tl2
-
-graph_map :: (a -> b) -> Graph a -> Graph b
-graph_map f (Graph nodes ls c s) = Graph (map f2 nodes) ls c s
- where f2 Nothing  = Nothing
-       f2 (Just e) = Just $ f e
-
-graph_acc :: (a -> b -> b) -> b -> Graph a -> b
-graph_acc f acc (Graph _ _ _ 0)                    = acc
-graph_acc f acc (Graph (Nothing:nds) (_:lks)  c s) = graph_acc f
-                                                               acc
-                                                               (Graph nds lks (c-1) s)
-graph_acc f acc (Graph (Just e:nds)  (lk:lks) c s) = graph_acc f
-                                                               acc2
-                                                               (Graph nds lks (c-1) (s-1))
- where acc2 = f e acc
+graph_convert :: (a -> b) -> Graph a -> Graph b
+graph_convert f g = fmap cvt g
+ where cvt (Vertex k lks) = Vertex (f k) lks
 -- }}}
 
+-- {{{ Tarjan algorithm
+data TrVx a = TrVx { num   :: Int,
+                     numa  :: Int,
+                     inP   :: Bool,
+                     value :: a
+                   }
+type TrPile a  = Pile (Vertex (TrVx a))
+type TrGraph a = Graph (TrVx a)
+
+trj_cvt :: a -> TrVx a
+trj_cvt e = TrVx (-1) (-1) True e
+
+tarjan :: Graph a -> [[a]]
+tarjan g = [[]] -- TODO
+
+parcours :: TrPile a -> [[a]] -> TrGraph a -> Int -> (TrPile a, [[a]], TrGraph a)
+parcours p part gr vx = 
+
+-- }}}
 
 
