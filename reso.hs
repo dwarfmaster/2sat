@@ -30,38 +30,60 @@ instance Show a => Show (Pile a) where
 -- }}}
 
 -- {{{ Graph structure
-data Vertex a = Vertex { key   :: a,
-                         links :: [Int]
-                       }
-instance Show a => Show (Vertex a) where
-    show v = "(" ++ show (key v) ++ ":" ++ show (links v) ++ ")"
-type Graph a = Array Int (Vertex a)
+-- Inductive graph structre, plainly a list of concepts
+data Node a    = Node { key :: Int, value :: a }
+type Edge      = Int
+data Context a = Context [Edge] (Node a) [Edge]
+data Graph a   = Empty
+               | Context a :& Graph a
 
-graph_build :: [(a, [Int])] -> Graph a
-graph_build l = listArray (1,length l) $ map (\(e, t) -> Vertex e t) l
+-- Text the emptiness of the graph O(1)
+is_empty :: Graph a -> Bool
+is_empty Empty = True
+is_empty _     = False
 
-graph_convert :: (a -> b) -> Graph a -> Graph b
-graph_convert f g = fmap cvt g
- where cvt (Vertex k lks) = Vertex (f k) lks
--- }}}
+-- Extract a context O(1)
+match_any :: Graph a -> (Context a, Graph a)
+match_any Empty    = error "matchAny : empty graph"
+match_any (c :& g) = (c, g)
 
--- {{{ Tarjan algorithm
-data TrVx a = TrVx { num   :: Int,
-                     numa  :: Int,
-                     inP   :: Bool,
-                     value :: a
-                   }
-type TrPile a  = Pile (Vertex (TrVx a))
-type TrGraph a = Graph (TrVx a)
+-- Extract a particular context matching f O(N)
+match :: (Context a -> Bool) -> Graph a -> (Maybe (Context a), Graph a)
+match f g = match_rec g Empty
+ where -- match_rec :: Graph a -> Graph a -> (Maybe (Context a), Graph a)
+       match_rec Empty ac = (Nothing, ac)
+       match_rec (c :& g2) ac = if f c
+                                  then (Just c, concatg g2 ac)
+                                  else match_rec g2 (c:&ac)
 
-trj_cvt :: a -> TrVx a
-trj_cvt e = TrVx (-1) (-1) True e
+match_by_key :: Int -> Graph a -> (Maybe (Context a), Graph a)
+match_by_key i = match (mkey i)
+ where mkey :: Int -> Context a -> Bool
+       mkey i (Context _ n _) = key n == i
 
-tarjan :: Graph a -> [[a]]
-tarjan g = [[]] -- TODO
+match_by_value :: Eq a => a -> Graph a -> (Maybe (Context a), Graph a)
+match_by_value a = match (mval a)
+ where -- mval :: a -> Context a -> Bool
+       mval v (Context _ n _) = value n == a
 
-parcours :: TrPile a -> [[a]] -> TrGraph a -> Int -> (TrPile a, [[a]], TrGraph a)
-parcours p part gr vx = 
+-- Join two graphs, for internal use only O(N1)
+concatg :: Graph a -> Graph a -> Graph a
+concatg Empty   g2    = g2
+concatg g1      Empty = g1
+concatg (c:&g1) g2    = concatg g1 (c:&g2)
+
+-- Map a value against all node O(N)
+mapg :: (a -> b) -> Graph a -> Graph b
+mapg _ Empty  = Empty
+mapg f (c:&g) = Context lk1 (Node (key nd) (f (value nd))) lk2 :& mapg f g
+ where Context lk1 nd lk2 = c
+
+-- Build a list from a hash function, an array of nodes and an array of edges
+build :: Eq a => (a -> Int) -> [a] -> [(a, a)] -> Graph a
+build _ []     _  = Empty
+build h (n:ns) ls = Context lk1 (Node (h n) n) lk2 :& build h ns ls
+ where lk1 = [h e | (e, f) <- ls, f == n]
+       lk2 = [h e | (f, e) <- ls, f == n]
 
 -- }}}
 
