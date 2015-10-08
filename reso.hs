@@ -30,60 +30,35 @@ instance Show a => Show (Pile a) where
 -- }}}
 
 -- {{{ Graph structure
--- Inductive graph structre, plainly a list of concepts
-data Node a    = Node { key :: Int, value :: a }
-type Edge      = Int
-data Context a = Context [Edge] (Node a) [Edge]
-data Graph a   = Empty
-               | Context a :& Graph a
+-- Graph to be build with a tying the knot method, can't handle unconnected components
+data EGraph a = EGraph a [EGraph a]
+-- Real Graph structure, a list of all nodes
+data Graph a  = Empty
+              | EGraph a :& Graph a
 
--- Text the emptiness of the graph O(1)
-is_empty :: Graph a -> Bool
-is_empty Empty = True
-is_empty _     = False
+-- TODO : make it really cyclic
+build :: Eq a => [a] -> [(a,a)] -> Graph a
+build []    _   = Empty
+build (h:t) lks = ebuild h lks :& build t lks
+ where ebuild :: Eq a => a -> [(a,a)] -> EGraph a
+       ebuild e lks = EGraph e lgs
+        where lgs = [ebuild b lks | (a,b) <- lks, a == e]
 
--- Extract a context O(1)
-match_any :: Graph a -> (Context a, Graph a)
-match_any Empty    = error "matchAny : empty graph"
-match_any (c :& g) = (c, g)
-
--- Extract a particular context matching f O(N)
-match :: (Context a -> Bool) -> Graph a -> (Maybe (Context a), Graph a)
-match f g = match_rec g Empty
- where -- match_rec :: Graph a -> Graph a -> (Maybe (Context a), Graph a)
-       match_rec Empty ac = (Nothing, ac)
-       match_rec (c :& g2) ac = if f c
-                                  then (Just c, concatg g2 ac)
-                                  else match_rec g2 (c:&ac)
-
-match_by_key :: Int -> Graph a -> (Maybe (Context a), Graph a)
-match_by_key i = match (mkey i)
- where mkey :: Int -> Context a -> Bool
-       mkey i (Context _ n _) = key n == i
-
-match_by_value :: Eq a => a -> Graph a -> (Maybe (Context a), Graph a)
-match_by_value a = match (mval a)
- where -- mval :: a -> Context a -> Bool
-       mval v (Context _ n _) = value n == a
-
--- Join two graphs, for internal use only O(N1)
-concatg :: Graph a -> Graph a -> Graph a
-concatg Empty   g2    = g2
-concatg g1      Empty = g1
-concatg (c:&g1) g2    = concatg g1 (c:&g2)
-
--- Map a value against all node O(N)
 mapg :: (a -> b) -> Graph a -> Graph b
-mapg _ Empty  = Empty
-mapg f (c:&g) = Context lk1 (Node (key nd) (f (value nd))) lk2 :& mapg f g
- where Context lk1 nd lk2 = c
+mapg _ Empty     = Empty
+mapg f (eg :& g) = mg f eg :& mapg f g
+ where mg :: (a -> b) -> EGraph a -> EGraph b
+       mg f (EGraph e sg) = EGraph (f e) $ map (mg f) sg
 
--- Build a list from a hash function, an array of nodes and an array of edges
-build :: Eq a => (a -> Int) -> [a] -> [(a, a)] -> Graph a
-build _ []     _  = Empty
-build h (n:ns) ls = Context lk1 (Node (h n) n) lk2 :& build h ns ls
- where lk1 = [h e | (e, f) <- ls, f == n]
-       lk2 = [h e | (f, e) <- ls, f == n]
+showg :: Show a => Graph a -> String
+showg Empty = ""
+showg (EGraph e egs :& g) = show e ++ " -> " ++ showegs egs ++ "\n" ++ showg g
+ where showegs :: Show a => [EGraph a] -> String
+       showegs lst = foldl fld "[ " lst ++ "]"
+        where fld :: Show a => String -> EGraph a -> String
+              fld str (EGraph e _) = str ++ show e ++ " "
+instance Show a => Show (Graph a) where
+    show = showg
 
 -- }}}
 
