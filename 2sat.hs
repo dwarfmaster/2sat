@@ -1,7 +1,13 @@
 -- vim:set foldmethod=marker:
 
 import Data.Graph
+import Data.Graph.Inductive.PatriciaTree
+import Data.Graph.Inductive.Graph
+import Data.GraphViz
+import Data.GraphViz.Printing
+import Data.Text.Lazy (unpack)
 
+-- Data types
 data Prob = Prob1 Int
           | Prob2 Int Int
 
@@ -11,6 +17,7 @@ sprob (Prob2 i1 i2) = "(p " ++ show i1 ++ " || " ++ show i2 ++ ")"
 instance Show Prob where
     show = sprob
 
+-- Building the graph
 tograph :: [Prob] -> [(Int, Int)]
 tograph []                = []
 tograph (Prob1 i : t)     = (-i, i) : tograph t
@@ -52,6 +59,7 @@ mscc g = map unnode nodes
        unnode (AcyclicSCC v) = [v]
        unnode (CyclicSCC vs) = vs
 
+-- Checking the components
 checkSCC :: [Int] -> Bool
 checkSCC a = check $ map abs a
  where check :: [Int] -> Bool
@@ -68,18 +76,38 @@ checkSCCs p = foldr chck True p
  where chck :: [Int] -> Bool -> Bool
        chck a p = p && checkSCC a
 
-sat :: [String] -> Bool
-sat strs = checkSCCs $ mscc $ g
+sat :: [String] -> (Bool, String)
+sat strs = (checkSCCs $ mscc $ g, dotGraph g)
  where (g,_) = buildg strs
 
-result :: Bool -> String
-result True  = "Problem solvable"
-result False = "Problem unsolvalble"
-
+-- Reading file
 linesof :: FilePath -> IO [String]
 linesof fp = do ct <- readFile fp
                 return $ lines ct
 
+-- Graphviz
+has :: Int -> [Int] -> Bool
+has _ []    = False
+has i (h:t) = if i == h then True else has i t
+
+graphvizgraph :: [(Int, Int, [Int])]
+              -> Data.Graph.Inductive.PatriciaTree.Gr Int ()
+graphvizgraph g = mkGraph nds links
+ where nodes = [i | (i,_,_) <- g]
+       nds   = [(i,i) | i <- nodes]
+       links = [(i,j,()) | (i,_,d) <- g, j <- nodes, has j d]
+
+dotGraph :: [(Int, Int, [Int])] -> String
+dotGraph g = unpack $ renderDot $ toDot $ graphToDot nonClusteredParams gg
+ where gg = graphvizgraph g
+
+-- Output
+result :: Bool -> String
+result True  = "Problem solvable"
+result False = "Problem unsolvalble"
+
 main = do lns <- linesof "pbsat"
-          putStrLn $ result $ sat lns
+          let (r, g) = sat lns
+          writeFile "outputGraph" g
+          putStrLn $ result r
 
